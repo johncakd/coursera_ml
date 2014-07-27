@@ -1,0 +1,94 @@
+Practical ML - Coursera
+========================================================
+
+## Loading libs and reading data
+```{r echo=FALSE}
+library(caret)
+pml.training <- read.csv("~/2014/coursera/practical_ml/pml-training.csv",na.strings = c("NA",""))
+pml.testing <- read.csv("~/2014/coursera/practical_ml/pml-testing.csv",na.strings = c("NA",""))
+```
+
+
+## Setting seed 
+```{r}
+set.seed(123123)
+```
+
+## Creating training/test partitions
+```{r}
+inTrain <- createDataPartition(y=pml.training$classe, p=0.7, list=FALSE)
+training <- pml.training[inTrain,]
+testing <- pml.training[-inTrain,]
+```
+
+## Cleaning Data
+* Remove columns related to user name, timestamps and window (columns 1:7)
+* Check and remove columns with almost zero var
+* Remove columns with almost all missing values
+```{r}
+n_feats = dim(pml.training)[2]
+names(training[,1:7])
+training = training[,8:n_feats] 
+testing = testing[,8:n_feats]
+pml.testing = pml.testing[,8:n_feats] 
+
+n_train = dim(training)[1]
+nzv = nearZeroVar(training)
+dim(training)
+training = training[,-nzv]
+testing = testing[,-nzv]
+dim(training)
+nas = colSums(is.na(training))/n_train
+table(nas)
+training = training[,names(nas[nas==0])]
+testing = testing[,names(nas[nas==0])]
+dim(training)
+
+pml.testing = pml.testing[,-nzv]
+pml.testing = pml.testing[,names(nas[nas==0])[1:52]]
+```
+
+### Feature selection with PCA
+```{r}
+pca = preProcess(x=training[,-which(names(training) == "classe")],method='pca',thresh=.9)
+pca
+trainPC <- predict(pca,training[,-which(names(training) == "classe")])
+```
+
+### Model with cross-validation
+* Check in-sample error
+* Check cv error
+```{r}
+fitControl <- trainControl(method="repeatedcv", number=10, repeats=10)
+model <- train(training$classe ~ ., data=trainPC, method="rf", ntree=25, trControl=fitControl)
+confusionMatrix(training$classe,predict(model,trainPC)) # in-sample error
+model # cv info and error
+
+```
+
+### Testing
+```{r}
+testPC <- predict(pca,testing[,-which(names(training) == "classe")])
+confusionMatrix(testing$classe,predict(model,testPC))
+```
+
+### Generating predictions
+```{r}
+pml.testingPC <- predict(pca,pml.testing)
+ans = predict(model,pml.testingPC)
+ans
+
+pml.testPC <- predict(pca,pml.testing)
+ans = predict(model,pml.testPC)
+
+pml_write_files = function(x) {
+    n = length(x)
+    for(i in 1:n){
+        filename = paste0("problem_id_",i,".txt")
+        write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+    }
+}
+
+pml_write_files(ans)
+
+```
